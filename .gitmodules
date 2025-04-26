@@ -1,0 +1,9 @@
+[submodule "GNetworking"]
+	path = external/GNetworking
+	url = https://github.com/GustavJones/GNetworking.git
+[submodule "GLog"]
+	path = external/GLog
+	url = https://github.com/GustavJones/GLog.git
+[submodule "GParsing"]
+	path = external/GParsing
+	url = https://github.com/GustavJones/GParsing.git
