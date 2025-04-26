@@ -1,7 +1,6 @@
 #include "Server/Server.hpp"
 #include "GLog/Log.hpp"
 #include "GNetworking/Socket.hpp"
-#include <WinSock2.h>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -59,7 +58,7 @@ void Server::_Setup(const std::string &_address, const uint16_t _port) {
 
 void Server::_Cleanup() {
   GLog::Log(GLog::LOG_DEBUG, "Server Cleanup");
-  if (GNetworking::SocketShutdown(GetServerSocket(), SD_BOTH) != 0) {
+  if (GNetworking::SocketShutdown(GetServerSocket(), GNetworkingSHUTDOWNRDWR) != 0) {
     throw std::runtime_error("Server Socket shutdown error");
   }
 
@@ -115,7 +114,7 @@ void Server::_CloseConnections() {
     if (GNetworking::SocketPoll(GetClientSockets()[i], GNetworkingPOLLHUP)) {
       GLog::Log(GLog::LOG_DEBUG,
                "Closing Socket FD: " + std::to_string(GetClientSockets()[i]));
-      GNetworking::SocketShutdown(GetClientSockets()[i], SD_BOTH);
+      GNetworking::SocketShutdown(GetClientSockets()[i], GNetworkingSHUTDOWNRDWR);
       GNetworking::SocketClose(GetClientSockets()[i]);
       GetClientSockets().erase(GetClientSockets().begin() + i);
     }
