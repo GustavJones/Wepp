@@ -1,10 +1,10 @@
 #include "Server/Server.hpp"
 #include "GLog/Log.hpp"
 #include "GNetworking/Socket.hpp"
+#include "GParsing/GParsing.hpp"
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -42,9 +42,15 @@ void Server::_Setup(const std::string &_address, const uint16_t _port) {
     throw std::runtime_error("Sockets Setup error");
   }
 
-  GetServerSocket() = GNetworking::SocketCreate(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  GetServerSocket() =
+      GNetworking::SocketCreate(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (GetServerSocket() == GNetworkingInvalidSocket) {
     throw std::runtime_error("Cannot create server socket");
+  }
+
+  int value = 1;
+  if (GNetworking::SocketSetOption(GetServerSocket(), SOL_SOCKET, SO_REUSEADDR, &value, sizeof(value)) != 0) {
+    throw std::runtime_error("Cannot set socket option SO_REUSEADDR");
   }
 
   if (GNetworking::SocketBind(GetServerSocket(), _address, _port) != 0) {
@@ -58,7 +64,8 @@ void Server::_Setup(const std::string &_address, const uint16_t _port) {
 
 void Server::_Cleanup() {
   GLog::Log(GLog::LOG_DEBUG, "Server Cleanup");
-  if (GNetworking::SocketShutdown(GetServerSocket(), GNetworkingSHUTDOWNRDWR) != 0) {
+  if (GNetworking::SocketShutdown(GetServerSocket(), GNetworkingSHUTDOWNRDWR) !=
+      0) {
     throw std::runtime_error("Server Socket shutdown error");
   }
 
@@ -96,7 +103,8 @@ void Server::_HandleClients() {
         }
       }
 
-      threadPool[threadIndex] = std::thread(&Server::_HandleOnThread, this, GetClientSockets()[i]);
+      threadPool[threadIndex] =
+          std::thread(&Server::_HandleOnThread, this, GetClientSockets()[i]);
       threadIndex++;
     }
   }
@@ -113,8 +121,9 @@ void Server::_CloseConnections() {
   for (int32_t i = GetClientSockets().size() - 1; i >= 0; i--) {
     if (GNetworking::SocketPoll(GetClientSockets()[i], GNetworkingPOLLHUP)) {
       GLog::Log(GLog::LOG_DEBUG,
-               "Closing Socket FD: " + std::to_string(GetClientSockets()[i]));
-      GNetworking::SocketShutdown(GetClientSockets()[i], GNetworkingSHUTDOWNRDWR);
+                "Closing Socket FD: " + std::to_string(GetClientSockets()[i]));
+      GNetworking::SocketShutdown(GetClientSockets()[i],
+                                  GNetworkingSHUTDOWNRDWR);
       GNetworking::SocketClose(GetClientSockets()[i]);
       GetClientSockets().erase(GetClientSockets().begin() + i);
     }
@@ -122,10 +131,14 @@ void Server::_CloseConnections() {
 }
 
 void Server::_HandleOnThread(GNetworking::GNetworkingSocket _client) {
+  GParsing::HTTPRequest req;
+  GParsing::HTTPResponse resp;
+  std::vector<unsigned char> buffer;
   std::string message;
   char character;
   long status;
 
+  m_mutex.lock();
   while (GNetworking::SocketPoll(_client, GNetworkingPOLLIN)) {
     status = GNetworking::SocketRecv(_client, &character, 1, 0);
 
@@ -133,18 +146,43 @@ void Server::_HandleOnThread(GNetworking::GNetworkingSocket _client) {
       break;
     }
 
-    message += character;
+    buffer.push_back(character);
   }
 
-  if (message != "") {
-    m_mutex.lock();
-    std::cout << '[' << "Socket FD: " << _client << ']' << " : " << message
-              << std::endl;
-    m_mutex.unlock();
+  m_mutex.unlock();
+
+  if (buffer.size() == 0) {
+    return;
   }
-  message = "";
+
+  message = "Socket FD " + std::to_string(_client) + " : ";
+
+  for(const auto & c : buffer) {
+    message += c;
+  }
+
+  GLog::Log(GLog::LOG_TRACE, message);
+
+  req.ParseRequest(buffer);
+
+  resp.version = "HTTP/1.1";
+  resp.response_code = 200;
+  resp.response_code_message = "OK";
+  resp.headers.push_back({"Connection", {"close"}});
+
+  buffer = resp.CreateResponse();
+
+  m_mutex.lock();
+  GNetworking::SocketSend(_client, (char *)buffer.data(), buffer.size(), 0);
+  GNetworking::SocketShutdown(_client, GNetworkingSHUTDOWNRDWR);
+  GNetworking::SocketClose(_client);
+  m_mutex.unlock();
 }
 
-GNetworking::GNetworkingSocket &Server::GetServerSocket() { return m_serverSocket; }
-std::vector<GNetworking::GNetworkingSocket> &Server::GetClientSockets() { return m_clientSockets; }
+GNetworking::GNetworkingSocket &Server::GetServerSocket() {
+  return m_serverSocket;
+}
+std::vector<GNetworking::GNetworkingSocket> &Server::GetClientSockets() {
+  return m_clientSockets;
+}
 } // namespace Wepp
