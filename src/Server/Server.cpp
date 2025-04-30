@@ -3,8 +3,12 @@
 #include "GNetworking/Socket.hpp"
 #include "GParsing/GParsing.hpp"
 #include <chrono>
+#include <climits>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
+#include <openssl/ssl.h>
+#include <ostream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -37,9 +41,25 @@ void Server::_MainLoop() {
 }
 
 void Server::_Setup(const std::string &_address, const uint16_t _port) {
+  const SSL_METHOD *serverMethod = TLS_server_method();
   GLog::Log(GLog::LOG_DEBUG, "Server Setup");
   if (GNetworking::SocketSetup() != 0) {
     throw std::runtime_error("Sockets Setup error");
+  }
+
+  m_sslCTX = SSL_CTX_new(serverMethod);
+  if (!m_sslCTX) {
+    throw std::runtime_error("Cannot create OpenSSL Context");
+  }
+
+  if (SSL_CTX_use_certificate_file(m_sslCTX, "ssl.crt.pem", SSL_FILETYPE_PEM) <=
+      0) {
+    throw std::runtime_error("Cannot assign ssl.crt.pem to SSL context");
+  }
+
+  if (SSL_CTX_use_PrivateKey_file(m_sslCTX, "ssl.key.pem", SSL_FILETYPE_PEM) <=
+      0) {
+    throw std::runtime_error("Cannot assign ssl.key.pem to SSL context");
   }
 
   GetServerSocket() =
@@ -49,7 +69,8 @@ void Server::_Setup(const std::string &_address, const uint16_t _port) {
   }
 
   int value = 1;
-  if (GNetworking::SocketSetOption(GetServerSocket(), SOL_SOCKET, SO_REUSEADDR, &value, sizeof(value)) != 0) {
+  if (GNetworking::SocketSetOption(GetServerSocket(), SOL_SOCKET, SO_REUSEADDR,
+                                   &value, sizeof(value)) != 0) {
     throw std::runtime_error("Cannot set socket option SO_REUSEADDR");
   }
 
@@ -76,6 +97,8 @@ void Server::_Cleanup() {
   if (GNetworking::SocketCleanup() != 0) {
     throw std::runtime_error("Sockets cleanup error");
   }
+
+  SSL_CTX_free(m_sslCTX);
 }
 
 void Server::_AcceptConnections() {
@@ -90,28 +113,38 @@ void Server::_AcceptConnections() {
 }
 
 void Server::_HandleClients() {
-  std::vector<std::thread> threadPool(m_THREAD_COUNT);
+  std::vector<std::pair<std::thread, SSL *>> threadPool(m_THREAD_COUNT);
   size_t threadIndex = 0;
 
   // Poll for reading on clients
   for (size_t i = 0; i < GetClientSockets().size(); i++) {
     if (GNetworking::SocketPoll(GetClientSockets()[i], GNetworkingPOLLIN)) {
-      if (threadIndex >= m_THREAD_COUNT) {
-        threadIndex = 0;
-        if (threadPool[threadIndex].joinable()) {
-          threadPool[threadIndex].join();
-        }
+      threadIndex = i % m_THREAD_COUNT;
+
+      // Cleanup running thread in pool
+      if (threadPool[threadIndex].first.joinable()) {
+        threadPool[threadIndex].first.join();
+        SSL_free(threadPool[threadIndex].second);
       }
 
-      threadPool[threadIndex] =
-          std::thread(&Server::_HandleOnThread, this, GetClientSockets()[i]);
-      threadIndex++;
+      // Create new thread
+      threadPool[threadIndex].second = SSL_new(m_sslCTX);
+      SSL_set_fd(threadPool[threadIndex].second, GetClientSockets()[i]);
+      if (SSL_accept(threadPool[threadIndex].second) <= 0) {
+        SSL_free(threadPool[threadIndex].second);
+        continue;
+      }
+
+      threadPool[threadIndex].first = std::thread(
+          &Server::_HandleOnThread, this, threadPool[threadIndex].second);
     }
   }
 
   for (size_t i = 0; i < m_THREAD_COUNT; i++) {
-    if (threadPool[i].joinable()) {
-      threadPool[i].join();
+    if (threadPool[i].first.joinable()) {
+      threadPool[i].first.join();
+
+      SSL_free(threadPool[i].second);
     }
   }
 }
@@ -130,53 +163,8 @@ void Server::_CloseConnections() {
   }
 }
 
-void Server::_HandleOnThread(GNetworking::GNetworkingSocket _client) {
-  GParsing::HTTPRequest req;
-  GParsing::HTTPResponse resp;
-  std::vector<unsigned char> buffer;
-  std::string message;
-  char character;
-  long status;
-
-  m_mutex.lock();
-  while (GNetworking::SocketPoll(_client, GNetworkingPOLLIN)) {
-    status = GNetworking::SocketRecv(_client, &character, 1, 0);
-
-    if (status != 1) {
-      break;
-    }
-
-    buffer.push_back(character);
-  }
-
-  m_mutex.unlock();
-
-  if (buffer.size() == 0) {
-    return;
-  }
-
-  message = "Socket FD " + std::to_string(_client) + " : ";
-
-  for(const auto & c : buffer) {
-    message += c;
-  }
-
-  GLog::Log(GLog::LOG_TRACE, message);
-
-  req.ParseRequest(buffer);
-
-  resp.version = "HTTP/1.1";
-  resp.response_code = 200;
-  resp.response_code_message = "OK";
-  resp.headers.push_back({"Connection", {"close"}});
-
-  buffer = resp.CreateResponse();
-
-  m_mutex.lock();
-  GNetworking::SocketSend(_client, (char *)buffer.data(), buffer.size(), 0);
-  GNetworking::SocketShutdown(_client, GNetworkingSHUTDOWNRDWR);
-  GNetworking::SocketClose(_client);
-  m_mutex.unlock();
+void Server::_HandleOnThread(SSL *_client) {
+  GNetworking::GNetworkingSocket clientSocket = SSL_get_fd(_client);
 }
 
 GNetworking::GNetworkingSocket &Server::GetServerSocket() {
