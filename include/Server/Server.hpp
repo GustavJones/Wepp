@@ -3,46 +3,49 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <openssl/ssl.h>
 #include <string>
 #include <vector>
 
 namespace Wepp {
-  class Server {
-  private:
-    const size_t m_THREAD_COUNT;
+class Server {
+private:
+  const size_t m_THREAD_COUNT;
 
-    GNetworking::GNetworkingSocket m_serverSocket;
-    std::vector<GNetworking::GNetworkingSocket> m_clientSockets;
+  GNetworking::GNetworkingSocket m_serverSocket;
+  std::vector<GNetworking::GNetworkingSocket> m_clientSockets;
 
-    std::mutex m_mutex;
+  SSL_CTX *m_sslCTX;
 
-  public:
-    Server(const size_t &_threadCount = 4);
-    Server(Server &&) = delete;
-    Server(const Server &) = delete;
-    Server &operator=(Server &&) = delete;
-    Server &operator=(const Server &) = delete;
-    ~Server();
+  std::mutex m_mutex;
 
-    void Run(const std::string &_address, const uint16_t _port);
+public:
+  Server(const size_t &_threadCount = 4);
+  Server(Server &&) = delete;
+  Server(const Server &) = delete;
+  Server &operator=(Server &&) = delete;
+  Server &operator=(const Server &) = delete;
+  ~Server();
 
-    GNetworking::GNetworkingSocket &GetServerSocket();
-    std::vector<GNetworking::GNetworkingSocket> &GetClientSockets();
-    const size_t &GetThreadCount();
+  void Run(const std::string &_address, const uint16_t _port);
 
-  private:
-    void _Setup(const std::string &_address, const uint16_t _port);
+  GNetworking::GNetworkingSocket &GetServerSocket();
+  std::vector<GNetworking::GNetworkingSocket> &GetClientSockets();
+  const size_t &GetThreadCount();
 
-    void _MainLoop();
+private:
+  void _Setup(const std::string &_address, const uint16_t _port);
 
-    void _Cleanup();
+  void _MainLoop();
 
-    void _AcceptConnections();
+  void _Cleanup();
 
-    void _HandleClients();
+  void _AcceptConnections();
 
-    void _CloseConnections();
+  void _HandleClients();
 
-    void _HandleOnThread(GNetworking::GNetworkingSocket _client);
-  };
-}
+  void _CloseConnections();
+
+  void _HandleOnThread(SSL *_client);
+};
+} // namespace Wepp
