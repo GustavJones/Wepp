@@ -13,7 +13,7 @@ private:
   const size_t m_THREAD_COUNT;
 
   GNetworking::GNetworkingSocket m_serverSocket;
-  std::vector<GNetworking::GNetworkingSocket> m_clientSockets;
+  std::vector<SSL *> m_clientSockets;
 
   SSL_CTX *m_sslCTX;
 
@@ -30,7 +30,7 @@ public:
   void Run(const std::string &_address, const uint16_t _port);
 
   GNetworking::GNetworkingSocket &GetServerSocket();
-  std::vector<GNetworking::GNetworkingSocket> &GetClientSockets();
+  std::vector<SSL *> &GetClientSockets();
   const size_t &GetThreadCount();
 
 private:
