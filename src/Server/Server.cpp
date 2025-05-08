@@ -30,6 +30,8 @@ void Server::Run(const std::string &_address, const uint16_t _port) {
 
 void Server::_MainLoop() {
   while (true) {
+    std::this_thread::sleep_for(std::chrono::microseconds(5));
+
     _AcceptConnections();
     _HandleClients();
     _CloseConnections();
