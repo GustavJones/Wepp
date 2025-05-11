@@ -101,6 +101,7 @@ void Server::_Cleanup() {
 
 void Server::_AcceptConnections() {
   SSL *connection;
+  int output;
 
   // Poll for new connections
   if (GNetworking::SocketPoll(GetServerSocket(), GNetworkingPOLLIN)) {
@@ -109,8 +110,16 @@ void Server::_AcceptConnections() {
     GetClientSockets().push_back(connection);
     GLog::Log(GLog::LOG_DEBUG, "Opened Connection on Socket FD: " +
                                    std::to_string(SSL_get_fd(connection)));
-    GLog::Log(GLog::LOG_DEBUG, "SSL handshake attempt: " +
-                                   std::to_string(SSL_accept(connection)));
+
+    output = SSL_accept(connection);
+    GLog::Log(GLog::LOG_DEBUG,
+              "SSL handshake attempt: " + std::to_string(output));
+
+    if (output < 0) {
+      GLog::Log(GLog::LOG_TRACE, "Shutdown socket");
+      GNetworking::SocketShutdown(SSL_get_fd(connection),
+                                  GNetworkingSHUTDOWNRDWR);
+    }
   }
 }
 
@@ -121,6 +130,11 @@ void Server::_HandleClients() {
 
   // Poll for reading on clients
   for (size_t i = 0; i < GetClientSockets().size(); i++) {
+    if (GNetworking::SocketPoll(SSL_get_fd(GetClientSockets()[i]),
+                                GNetworkingPOLLHUP)) {
+      continue;
+    }
+
     if (GNetworking::SocketPoll(SSL_get_fd(GetClientSockets()[i]),
                                 GNetworkingPOLLIN)) {
       threadIndex = i % m_THREAD_COUNT;
@@ -163,53 +177,72 @@ void Server::_CloseConnections() {
   }
 }
 
+size_t Server::_FindRequestSize(SSL *_client) {
+  constexpr size_t PEEK_INCREMENT = 512;
+  int32_t recvSize = 0;
+  int32_t recvOutput = recvSize;
+  std::vector<unsigned char> buffer;
+
+  while (recvOutput >= recvSize) {
+    recvSize += PEEK_INCREMENT;
+    buffer.resize(recvSize);
+    m_mutex.lock();
+    recvOutput = SSL_peek(_client, buffer.data(), buffer.size());
+    m_mutex.unlock();
+  }
+
+  if (recvOutput <= 0) {
+    return 0;
+  } else {
+    return recvOutput;
+  }
+}
+
+void Server::_ReadBuffer(SSL *_client, std::vector<unsigned char> &_buffer) {
+  m_mutex.lock();
+  SSL_read(_client, _buffer.data(), _buffer.size());
+  m_mutex.unlock();
+}
+
 void Server::_HandleOnThread(SSL *_client) {
   GParsing::HTTPRequest req;
-  GParsing::HTTPRequest resp;
-  constexpr size_t PEEK_INCREMENT = 512;
-  int64_t recvSize = 0;
-  int64_t recvOutput = recvSize;
+  GParsing::HTTPResponse resp;
   std::vector<unsigned char> recvBuffer;
   std::vector<unsigned char> sendBuffer;
   GNetworking::GNetworkingSocket clientSocket = SSL_get_fd(_client);
 
-  if (GNetworking::SocketPoll(clientSocket, GNetworkingPOLLIN)) {
-    while (recvOutput >= recvSize) {
-      recvSize += PEEK_INCREMENT;
-      recvBuffer.resize(recvSize);
-      m_mutex.lock();
-      recvOutput = SSL_peek(_client, recvBuffer.data(), recvSize);
-      m_mutex.unlock();
-    }
+  size_t recvSize;
 
-    if (recvOutput <= 0) {
-      GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(clientSocket) +
-                                       "]: Unable to read on socket");
-      m_mutex.lock();
-      GNetworking::SocketShutdown(clientSocket, GNetworkingSHUTDOWNRDWR);
-      m_mutex.unlock();
-      return;
-    }
+  if (!GNetworking::SocketPoll(clientSocket, GNetworkingPOLLIN)) {
+    return;
+  }
 
-    recvBuffer.resize(recvOutput);
+  recvSize = _FindRequestSize(_client);
+
+  if (recvSize <= 0) {
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(clientSocket) + "]: Unable to read on socket");
     m_mutex.lock();
-    recvOutput = SSL_read(_client, recvBuffer.data(), recvBuffer.size());
-    m_mutex.unlock();
-
-    req.ParseRequest(recvBuffer);
-
-    GLog::Log(GLog::LOG_TRACE, (char *)recvBuffer.data());
-    resp.method = GParsing::HTTPMethod::GPARSING_GET;
-    resp.version = "HTTP/1.1";
-    resp.uri = req.uri;
-    resp.headers.push_back({"Connection", {"close"}});
-    sendBuffer = resp.CreateRequest();
-
-    m_mutex.lock();
-    SSL_write(_client, sendBuffer.data(), sendBuffer.size());
     GNetworking::SocketShutdown(clientSocket, GNetworkingSHUTDOWNRDWR);
     m_mutex.unlock();
+    return;
   }
+
+  recvBuffer.resize(recvSize);
+  _ReadBuffer(_client, recvBuffer);
+  req.ParseRequest(recvBuffer);
+
+  GLog::Log(GLog::LOG_TRACE, (char *)recvBuffer.data());
+  resp.version = "HTTP/1.1";
+  resp.response_code = 200;
+  resp.response_code_message = "OK";
+  resp.headers.push_back({"Connection", {"close"}});
+  resp.message = GParsing::ConvertToCharArray("Hello World!", 12);
+  sendBuffer = resp.CreateResponse();
+
+  m_mutex.lock();
+  SSL_write(_client, sendBuffer.data(), sendBuffer.size());
+  GNetworking::SocketShutdown(clientSocket, GNetworkingSHUTDOWNRDWR);
+  m_mutex.unlock();
 }
 
 GNetworking::GNetworkingSocket &Server::GetServerSocket() {
