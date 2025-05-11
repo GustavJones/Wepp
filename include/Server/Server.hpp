@@ -47,5 +47,9 @@ private:
   void _CloseConnections();
 
   void _HandleOnThread(SSL *_client);
+
+  size_t _FindRequestSize(SSL *_client);
+
+  void _ReadBuffer(SSL *_client, std::vector<unsigned char> &_buffer);
 };
 } // namespace Wepp
