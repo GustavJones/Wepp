@@ -6,6 +6,9 @@
 #include <climits>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <ios>
 #include <openssl/ssl.h>
 #include <stdexcept>
 #include <string>
@@ -13,9 +16,14 @@
 #include <vector>
 
 namespace Wepp {
-Server::Server(const size_t &_threadCount) : m_THREAD_COUNT(_threadCount) {
+Server::Server(const size_t &_threadCount, const std::filesystem::path &_dataDir) : m_THREAD_COUNT(_threadCount), m_dataDir(_dataDir) {
   GetClientSockets().resize(0);
+
+  if (!std::filesystem::exists(m_dataDir)) {
+    std::filesystem::create_directories(_dataDir);
+  }
 }
+
 Server::~Server() {}
 
 void Server::Run(const std::string &_address, const uint16_t _port) {
@@ -204,6 +212,44 @@ void Server::_ReadBuffer(SSL *_client, std::vector<unsigned char> &_buffer) {
   m_mutex.unlock();
 }
 
+void Server::_SendBuffer(SSL *_client,
+                         const std::vector<unsigned char> &_buffer,
+                         bool _close) {
+  m_mutex.lock();
+  SSL_write(_client, _buffer.data(), _buffer.size());
+  if (_close) {
+    GNetworking::SocketShutdown(SSL_get_fd(_client), GNetworkingSHUTDOWNRDWR);
+  }
+  m_mutex.unlock();
+}
+
+size_t Server::_FileSize(const std::filesystem::path &_filename) {
+  size_t output;
+  std::fstream file;
+  file.open(_filename, std::ios::in | std::ios::ate);
+  output = file.tellg();
+  file.close();
+  return output;
+}
+
+void Server::_ReadFile(const std::filesystem::path &_filename,
+                       std::vector<unsigned char> &_buffer) {
+  std::fstream file;
+  file.open(_filename, std::ios::in | std::ios::binary);
+  file.read((char *)_buffer.data(), _buffer.size());
+  file.close();
+}
+
+bool Server::_HasHostHeader(const GParsing::HTTPRequest &_req) {
+  for (const auto &header : _req.headers) {
+    if (header.first == "Host" || header.first == "host") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void Server::_HandleOnThread(SSL *_client) {
   GParsing::HTTPRequest req;
   GParsing::HTTPResponse resp;
@@ -220,7 +266,8 @@ void Server::_HandleOnThread(SSL *_client) {
   recvSize = _FindRequestSize(_client);
 
   if (recvSize <= 0) {
-    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(clientSocket) + "]: Unable to read on socket");
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(clientSocket) +
+                                     "]: Unable to read on socket");
     m_mutex.lock();
     GNetworking::SocketShutdown(clientSocket, GNetworkingSHUTDOWNRDWR);
     m_mutex.unlock();
@@ -229,20 +276,59 @@ void Server::_HandleOnThread(SSL *_client) {
 
   recvBuffer.resize(recvSize);
   _ReadBuffer(_client, recvBuffer);
+  GLog::Log(GLog::LOG_TRACE, (char *)recvBuffer.data());
   req.ParseRequest(recvBuffer);
 
-  GLog::Log(GLog::LOG_TRACE, (char *)recvBuffer.data());
+  if (!_HasHostHeader(req)) {
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(clientSocket) + "]: Connection request did not provide a Host header");
+    resp.version = "HTTP/1.1";
+    resp.response_code = 400;
+    resp.response_code_message = "Bad Request";
+    resp.headers.push_back({"Connection", {"close"}});
+    sendBuffer = resp.CreateResponse();
+    _SendBuffer(_client, sendBuffer);
+    return;
+  } else {
+    GLog::Log(GLog::LOG_DEBUG, '[' + std::to_string(clientSocket) + "]: Sending Continue Response");
+    resp.version = "HTTP/1.1";
+    resp.response_code = 100;
+    resp.response_code_message = "Continue";
+    resp.headers.push_back({"Connection", {"keep-alive"}});
+    sendBuffer = resp.CreateResponse();
+    _SendBuffer(_client, sendBuffer, false);
+  }
+
+  if (req.uri.find('/') == req.uri.find("//")) {
+    int index = req.uri.find("//") + 2;
+    req.uri.erase(0, index);
+  }
+
+  req.uri.erase(0, req.uri.find('/') + 1);
+
+  if (req.uri == "") {
+    req.uri = "index.html";
+  }
+
   resp.version = "HTTP/1.1";
   resp.response_code = 200;
   resp.response_code_message = "OK";
-  resp.headers.push_back({"Connection", {"close"}});
-  resp.message = GParsing::ConvertToCharArray("Hello World!", 12);
-  sendBuffer = resp.CreateResponse();
 
-  m_mutex.lock();
-  SSL_write(_client, sendBuffer.data(), sendBuffer.size());
-  GNetworking::SocketShutdown(clientSocket, GNetworkingSHUTDOWNRDWR);
-  m_mutex.unlock();
+  GLog::Log(GLog::LOG_TRACE, '[' + std::to_string(clientSocket) + "]: Requesting URI - " + std::filesystem::absolute(req.uri).string());
+  if (std::filesystem::exists(std::filesystem::absolute(m_dataDir / req.uri))) {
+    sendBuffer.resize(_FileSize(std::filesystem::absolute(m_dataDir / req.uri)));
+    _ReadFile(std::filesystem::absolute(m_dataDir / req.uri), sendBuffer);
+
+    resp.message = sendBuffer;
+  }
+  else {
+    resp.response_code = 404;
+    resp.response_code_message = "Not Found";
+  }
+
+  resp.headers.push_back({"Connection", {"close"}});
+
+  sendBuffer = resp.CreateResponse();
+  _SendBuffer(_client, sendBuffer);
 }
 
 GNetworking::GNetworkingSocket &Server::GetServerSocket() {

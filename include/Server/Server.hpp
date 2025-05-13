@@ -1,7 +1,9 @@
 #pragma once
 #include "GNetworking/Socket.hpp"
+#include "GParsing/GParsing.hpp"
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <mutex>
 #include <openssl/ssl.h>
 #include <string>
@@ -19,8 +21,10 @@ private:
 
   std::mutex m_mutex;
 
+  const std::filesystem::path m_dataDir;
+
 public:
-  Server(const size_t &_threadCount = 4);
+  Server(const size_t &_threadCount = 4, const std::filesystem::path &_dataDir = "data");
   Server(Server &&) = delete;
   Server(const Server &) = delete;
   Server &operator=(Server &&) = delete;
@@ -51,5 +55,12 @@ private:
   size_t _FindRequestSize(SSL *_client);
 
   void _ReadBuffer(SSL *_client, std::vector<unsigned char> &_buffer);
+  void _SendBuffer(SSL *_client, const std::vector<unsigned char> &_buffer, bool _close = true);
+
+  size_t _FileSize(const std::filesystem::path &_filename);
+
+  void _ReadFile(const std::filesystem::path &_filename, std::vector<unsigned char> &_buffer);
+
+  bool _HasHostHeader(const GParsing::HTTPRequest &_req);
 };
 } // namespace Wepp
