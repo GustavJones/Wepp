@@ -38,7 +38,7 @@ void Server::Run(const std::string &_address, const uint16_t _port) {
 
 void Server::_MainLoop() {
   while (true) {
-    std::this_thread::sleep_for(std::chrono::microseconds(5));
+    std::this_thread::sleep_for(std::chrono::microseconds(25));
 
     _AcceptConnections();
     _HandleClients();
@@ -174,13 +174,12 @@ void Server::_CloseConnections() {
     sock = SSL_get_fd(GetClientSockets()[i]);
 
     if (GNetworking::SocketPoll(sock, GNetworkingPOLLHUP)) {
-      GLog::Log(GLog::LOG_DEBUG,
-                "Closing Socket FD: " +
-                    std::to_string(SSL_get_fd(GetClientSockets()[i])));
+      GLog::Log(GLog::LOG_DEBUG, "Closing Socket FD: " + std::to_string(SSL_get_fd(GetClientSockets()[i])));
       GNetworking::SocketShutdown(sock, GNetworkingSHUTDOWNRDWR);
       GNetworking::SocketClose(sock);
       SSL_free(GetClientSockets()[i]);
       GetClientSockets().erase(GetClientSockets().begin() + i);
+      GLog::Log(GLog::LOG_DEBUG, "Amount of active sockets: " + std::to_string(GetClientSockets().size()));
     }
   }
 }
@@ -190,6 +189,12 @@ size_t Server::_FindRequestSize(SSL *_client) {
   int32_t recvSize = 0;
   int32_t recvOutput = recvSize;
   std::vector<unsigned char> buffer;
+
+  if (GNetworking::SocketPoll(SSL_get_fd(_client), GNetworkingPOLLHUP)) {
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client)) + "]: Failed to peek on socket");
+    GNetworking::SocketShutdown(SSL_get_fd(_client), GNetworkingSHUTDOWNRDWR);
+    return 0;
+  }
 
   while (recvOutput >= recvSize) {
     recvSize += PEEK_INCREMENT;
@@ -207,6 +212,12 @@ size_t Server::_FindRequestSize(SSL *_client) {
 }
 
 void Server::_ReadBuffer(SSL *_client, std::vector<unsigned char> &_buffer) {
+  if (GNetworking::SocketPoll(SSL_get_fd(_client), GNetworkingPOLLHUP)) {
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client)) + "]: Failed to read on socket");
+    GNetworking::SocketShutdown(SSL_get_fd(_client), GNetworkingSHUTDOWNRDWR);
+    return;
+  }
+
   m_mutex.lock();
   SSL_read(_client, _buffer.data(), _buffer.size());
   m_mutex.unlock();
@@ -215,6 +226,12 @@ void Server::_ReadBuffer(SSL *_client, std::vector<unsigned char> &_buffer) {
 void Server::_SendBuffer(SSL *_client,
                          const std::vector<unsigned char> &_buffer,
                          bool _close) {
+  if (GNetworking::SocketPoll(SSL_get_fd(_client), GNetworkingPOLLHUP)) {
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client)) + "]: Failed to send on socket");
+    GNetworking::SocketShutdown(SSL_get_fd(_client), GNetworkingSHUTDOWNRDWR);
+    return;
+  }
+
   m_mutex.lock();
   SSL_write(_client, _buffer.data(), _buffer.size());
   if (_close) {
@@ -266,8 +283,7 @@ void Server::_HandleOnThread(SSL *_client) {
   recvSize = _FindRequestSize(_client);
 
   if (recvSize <= 0) {
-    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(clientSocket) +
-                                     "]: Unable to read on socket");
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(clientSocket) + "]: Unable to read on socket");
     m_mutex.lock();
     GNetworking::SocketShutdown(clientSocket, GNetworkingSHUTDOWNRDWR);
     m_mutex.unlock();
