@@ -1,15 +1,19 @@
 #pragma once
 #include "GNetworking/Socket.hpp"
 #include "GParsing/GParsing.hpp"
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <mutex>
 #include <openssl/ssl.h>
 #include <string>
 #include <vector>
 
 namespace Wepp {
+
+typedef bool (*WEPP_HANDLER_FUNC)(GParsing::HTTPRequest _req, GParsing::HTTPResponse &_resp, bool &_closeConnection);
+typedef bool (*WEPP_POST_HANDLER_SUCCESS_FUNC)(GParsing::HTTPRequest _req, GParsing::HTTPResponse &_resp);
+
 class Server {
 private:
   const size_t m_THREAD_COUNT;
@@ -20,11 +24,11 @@ private:
   SSL_CTX *m_sslCTX;
 
   std::mutex m_mutex;
-
-  const std::filesystem::path m_dataDir;
+  const std::atomic<WEPP_HANDLER_FUNC> m_handlerFunc;
+  const std::atomic<WEPP_POST_HANDLER_SUCCESS_FUNC> m_postHandlerFunc;
 
 public:
-  Server(const size_t &_threadCount = 4, const std::filesystem::path &_dataDir = "data");
+  Server(const WEPP_HANDLER_FUNC _handler, const WEPP_POST_HANDLER_SUCCESS_FUNC _postHandler, const size_t &_threadCount = 4);
   Server(Server &&) = delete;
   Server(const Server &) = delete;
   Server &operator=(Server &&) = delete;
@@ -50,17 +54,12 @@ private:
 
   void _CloseConnections();
 
-  void _HandleOnThread(SSL *_client);
+  void _HandleOnThread(SSL *_client, WEPP_HANDLER_FUNC _handler, WEPP_POST_HANDLER_SUCCESS_FUNC _postHandler);
 
   size_t _FindRequestSize(SSL *_client);
 
   void _ReadBuffer(SSL *_client, std::vector<unsigned char> &_buffer);
-  void _SendBuffer(SSL *_client, const std::vector<unsigned char> &_buffer, bool _close = true);
-
-  size_t _FileSize(const std::filesystem::path &_filename);
-
-  void _ReadFile(const std::filesystem::path &_filename, std::vector<unsigned char> &_buffer);
-
-  bool _HasHostHeader(const GParsing::HTTPRequest &_req);
+  void _SendBuffer(SSL *_client, const std::vector<unsigned char> &_buffer,
+                   bool _close = true);
 };
 } // namespace Wepp
