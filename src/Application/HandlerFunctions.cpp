@@ -5,7 +5,7 @@
 #include <filesystem>
 
 namespace Wepp {
-bool HandleRequestResponse(GParsing::HTTPRequest _req,
+bool HandleWeb(GParsing::HTTPRequest _req,
                            GParsing::HTTPResponse &_resp,
                            bool &_closeConnection) {
   std::vector<unsigned char> buffer;
@@ -59,7 +59,7 @@ bool HandleRequestResponse(GParsing::HTTPRequest _req,
   return true;
 }
 
-bool HandlerContinue(GParsing::HTTPRequest _req,
+bool HandleWebPost(GParsing::HTTPRequest _req,
                      GParsing::HTTPResponse &_resp) {
   _resp.version = "HTTP/1.1";
   _resp.response_code = 100;

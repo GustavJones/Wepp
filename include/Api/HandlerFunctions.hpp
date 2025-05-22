@@ -2,9 +2,9 @@
 #include "GParsing/GParsing.hpp"
 
 namespace Wepp {
-bool HandleWeb(GParsing::HTTPRequest _req,
+bool HandleApi(GParsing::HTTPRequest _req,
                            GParsing::HTTPResponse &_resp,
                            bool &_closeConnection);
 
-bool HandleWebPost(GParsing::HTTPRequest _req, GParsing::HTTPResponse &_resp);
+bool HandleApiPost(GParsing::HTTPRequest _req, GParsing::HTTPResponse &_resp);
 } // namespace Wepp
