@@ -2,3 +2,6 @@
 build/**
 *.pem
 **/data/
+.vs/**
+.vscode/**
+out/**
