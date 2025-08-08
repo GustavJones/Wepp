@@ -9,7 +9,12 @@ static const std::string ADDRESS = "0.0.0.0";
 static const uint16_t PORT = 8081;
 
 int main(int argc, char *argv[]) {
+#ifdef NDEBUG
+  GLog::SetLogLevel(GLog::LOG_WARNING);
+#else
   GLog::SetLogLevel(GLog::LOG_DEBUG);
+#endif // NDEBUG
+
   GLog::SetLogPrefix(PREFIX);
 
   Wepp::Server server(Wepp::HandleWeb, Wepp::HandleWebPost);
