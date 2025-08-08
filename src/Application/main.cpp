@@ -12,6 +12,7 @@ int main(int argc, char *argv[]) {
   GLog::SetLogLevel(GLog::LOG_DEBUG);
   GLog::SetLogPrefix(PREFIX);
 
+  Wepp::SetupHandling();
   Wepp::Server server(Wepp::HandleWeb, Wepp::HandleWebPost);
 
   GLog::Log(GLog::LOG_PRINT, "Starting Wepp server on " + ADDRESS + ':' + std::to_string(PORT));

@@ -4,10 +4,17 @@
 #include "GLog/Log.hpp"
 #include <filesystem>
 
+static const std::filesystem::path s_DATA_PATH = "data";
+
 namespace Wepp {
-bool HandleWeb(GParsing::HTTPRequest _req,
-                           GParsing::HTTPResponse &_resp,
-                           bool &_closeConnection) {
+void SetupHandling() {
+  if (!std::filesystem::exists(std::filesystem::absolute(s_DATA_PATH)) || !std::filesystem::is_directory(std::filesystem::absolute(s_DATA_PATH))) {
+    std::filesystem::create_directory(std::filesystem::absolute(s_DATA_PATH));
+  }
+}
+
+bool HandleWeb(GParsing::HTTPRequest _req, GParsing::HTTPResponse &_resp,
+               bool &_closeConnection) {
   std::vector<unsigned char> buffer;
 
   if (!HasHostHeader(_req)) {
@@ -37,14 +44,12 @@ bool HandleWeb(GParsing::HTTPRequest _req,
 
   GLog::Log(GLog::LOG_TRACE, "[Handler]: Requesting URI - " +
                                  std::filesystem::absolute(_req.uri).string());
-  if (std::filesystem::exists(std::filesystem::absolute(
-          (std::filesystem::path) "data" / _req.uri))) {
+  if (std::filesystem::exists(
+          std::filesystem::absolute(s_DATA_PATH / _req.uri))) {
     GLog::Log(GLog::LOG_TRACE, "[Handler]: File found!");
-    buffer.resize(Wepp::FileSize(
-        std::filesystem::absolute((std::filesystem::path) "data" / _req.uri)));
-    Wepp::ReadFile(
-        std::filesystem::absolute((std::filesystem::path) "data" / _req.uri),
-        buffer);
+    buffer.resize(
+        Wepp::FileSize(std::filesystem::absolute(s_DATA_PATH / _req.uri)));
+    Wepp::ReadFile(std::filesystem::absolute(s_DATA_PATH / _req.uri), buffer);
 
     _resp.message = buffer;
   } else {
@@ -59,8 +64,7 @@ bool HandleWeb(GParsing::HTTPRequest _req,
   return true;
 }
 
-bool HandleWebPost(GParsing::HTTPRequest _req,
-                     GParsing::HTTPResponse &_resp) {
+bool HandleWebPost(GParsing::HTTPRequest _req, GParsing::HTTPResponse &_resp) {
   _resp.version = "HTTP/1.1";
   _resp.response_code = 100;
   _resp.response_code_message = "Continue";
