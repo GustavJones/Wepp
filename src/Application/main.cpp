@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
 #ifdef NDEBUG
   GLog::SetLogLevel(GLog::LOG_WARNING);
 #else
-  GLog::SetLogLevel(GLog::LOG_DEBUG);
+  GLog::SetLogLevel(GLog::LOG_TRACE);
 #endif // NDEBUG
 
   GLog::SetLogPrefix(PREFIX);

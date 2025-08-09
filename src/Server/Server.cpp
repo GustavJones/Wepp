@@ -13,7 +13,11 @@
 #include <vector>
 
 namespace Wepp {
-Server::Server(const WEPP_HANDLER_FUNC _handler, const WEPP_POST_HANDLER_SUCCESS_FUNC _postHandler, const size_t &_threadCount) : m_THREAD_COUNT(_threadCount), m_handlerFunc(_handler), m_postHandlerFunc(_postHandler) {
+Server::Server(const WEPP_HANDLER_FUNC _handler,
+               const WEPP_POST_HANDLER_SUCCESS_FUNC _postHandler,
+               const size_t &_threadCount)
+    : m_THREAD_COUNT(_threadCount), m_handlerFunc(_handler),
+      m_postHandlerFunc(_postHandler) {
   GetClientSockets().resize(0);
 }
 
@@ -101,8 +105,10 @@ void Server::_Cleanup() {
 }
 
 void Server::_AcceptConnections() {
+  std::vector<unsigned char> buffer;
   SSL *connection;
   int output;
+  size_t pollSize;
 
   // Poll for new connections
   if (GNetworking::SocketPoll(GetServerSocket(), GNetworkingPOLLIN)) {
@@ -112,12 +118,53 @@ void Server::_AcceptConnections() {
     GLog::Log(GLog::LOG_DEBUG, "Opened Connection on Socket FD: " +
                                    std::to_string(SSL_get_fd(connection)));
 
+    pollSize = GNetworking::SocketPollSize(SSL_get_fd(connection));
+    buffer.resize(pollSize);
+    GNetworking::SocketPeek(SSL_get_fd(connection), (char *)buffer.data(), buffer.size(), 0);
+
     output = SSL_accept(connection);
-    GLog::Log(GLog::LOG_DEBUG,
-              "SSL handshake attempt: " + std::to_string(output));
+    GLog::Log(GLog::LOG_DEBUG, "SSL handshake attempt output: " + std::to_string(output));
 
     if (output < 0) {
-      GLog::Log(GLog::LOG_TRACE, "Shutdown socket");
+      GParsing::HTTPResponse redirectResponse;
+      GParsing::HTTPRequest req;
+
+      GLog::Log(GLog::LOG_TRACE, "SSL handshake failed. Redirecting to HTTPS.");
+      req.ParseRequest(buffer);
+
+      std::string hostValue;
+      for(const auto & header : req.headers) {
+        if (header.first == "Host") {
+          if (header.second.size() != 1) {
+            break;
+          } else {
+            hostValue = header.second[0];
+          }
+        }
+      }
+
+      if (hostValue != "") {
+        const std::string findHTTP = "http://";
+        if (hostValue.find(findHTTP) == 0) {
+          hostValue.replace(0, findHTTP.length(), "https://");
+        }
+        else if (hostValue.find('/') == 0) {
+          hostValue.insert(0, "https:/");
+        }
+        else {
+          hostValue.insert(0, "https://");
+        }
+
+        redirectResponse.response_code = 301;
+        redirectResponse.response_code_message = "Moved Permanently";
+        redirectResponse.headers.push_back({"Location", {hostValue}});
+        redirectResponse.version = "HTTP/1.1";
+        redirectResponse.message.clear();
+        auto respBuffer = redirectResponse.CreateResponse();
+
+        GNetworking::SocketSend(SSL_get_fd(connection), (char *)respBuffer.data(), respBuffer.size(), 0);
+      }
+
       GNetworking::SocketShutdown(SSL_get_fd(connection),
                                   GNetworkingSHUTDOWNRDWR);
     }
@@ -150,10 +197,10 @@ void Server::_HandleClients() {
 
       // Create new thread
       threadPool[threadIndex] =
-          std::thread(&Server::_HandleOnThread, this, GetClientSockets()[i], handlerFunc, postHandlerFunc);
+          std::thread(&Server::_HandleOnThread, this, GetClientSockets()[i],
+                      handlerFunc, postHandlerFunc);
     }
   }
-
 
   for (size_t i = 0; i < m_THREAD_COUNT; i++) {
     if (threadPool[i].joinable()) {
@@ -171,12 +218,15 @@ void Server::_CloseConnections() {
     sock = SSL_get_fd(GetClientSockets()[i]);
 
     if (GNetworking::SocketPoll(sock, GNetworkingPOLLHUP)) {
-      GLog::Log(GLog::LOG_DEBUG, "Closing Socket FD: " + std::to_string(SSL_get_fd(GetClientSockets()[i])));
+      GLog::Log(GLog::LOG_DEBUG,
+                "Closing Socket FD: " +
+                    std::to_string(SSL_get_fd(GetClientSockets()[i])));
       GNetworking::SocketShutdown(sock, GNetworkingSHUTDOWNRDWR);
       GNetworking::SocketClose(sock);
       SSL_free(GetClientSockets()[i]);
       GetClientSockets().erase(GetClientSockets().begin() + i);
-      GLog::Log(GLog::LOG_DEBUG, "Amount of active sockets: " + std::to_string(GetClientSockets().size()));
+      GLog::Log(GLog::LOG_DEBUG, "Amount of active sockets: " +
+                                     std::to_string(GetClientSockets().size()));
     }
   }
 }
@@ -188,7 +238,8 @@ size_t Server::_FindRequestSize(SSL *_client) {
   std::vector<unsigned char> buffer;
 
   if (GNetworking::SocketPoll(SSL_get_fd(_client), GNetworkingPOLLHUP)) {
-    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client)) + "]: Failed to peek on socket");
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client)) +
+                                     "]: Failed to peek on socket");
     GNetworking::SocketShutdown(SSL_get_fd(_client), GNetworkingSHUTDOWNRDWR);
     return 0;
   }
@@ -210,7 +261,8 @@ size_t Server::_FindRequestSize(SSL *_client) {
 
 void Server::_ReadBuffer(SSL *_client, std::vector<unsigned char> &_buffer) {
   if (GNetworking::SocketPoll(SSL_get_fd(_client), GNetworkingPOLLHUP)) {
-    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client)) + "]: Failed to read on socket");
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client)) +
+                                     "]: Failed to read on socket");
     GNetworking::SocketShutdown(SSL_get_fd(_client), GNetworkingSHUTDOWNRDWR);
     return;
   }
@@ -223,9 +275,11 @@ void Server::_ReadBuffer(SSL *_client, std::vector<unsigned char> &_buffer) {
 void Server::_SendBuffer(SSL *_client,
                          const std::vector<unsigned char> &_buffer,
                          bool _close) {
-  GLog::Log(GLog::LOG_TRACE, '[' + std::to_string(SSL_get_fd(_client)) + "]: Sending response");
+  GLog::Log(GLog::LOG_TRACE,
+            '[' + std::to_string(SSL_get_fd(_client)) + "]: Sending response");
   if (GNetworking::SocketPoll(SSL_get_fd(_client), GNetworkingPOLLHUP)) {
-    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client)) + "]: Failed to send on socket");
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client)) +
+                                     "]: Failed to send on socket");
     GNetworking::SocketShutdown(SSL_get_fd(_client), GNetworkingSHUTDOWNRDWR);
     return;
   }
@@ -238,7 +292,8 @@ void Server::_SendBuffer(SSL *_client,
   m_mutex.unlock();
 }
 
-void Server::_HandleOnThread(SSL *_client, WEPP_HANDLER_FUNC _handler, WEPP_POST_HANDLER_SUCCESS_FUNC _postHandler) {
+void Server::_HandleOnThread(SSL *_client, WEPP_HANDLER_FUNC _handler,
+                             WEPP_POST_HANDLER_SUCCESS_FUNC _postHandler) {
   bool closeConnection;
   GParsing::HTTPRequest req;
   GParsing::HTTPResponse resp;
@@ -255,7 +310,8 @@ void Server::_HandleOnThread(SSL *_client, WEPP_HANDLER_FUNC _handler, WEPP_POST
   recvSize = _FindRequestSize(_client);
 
   if (recvSize <= 0) {
-    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(clientSocket) + "]: Unable to read on socket");
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(clientSocket) +
+                                     "]: Unable to read on socket");
     m_mutex.lock();
     GNetworking::SocketShutdown(clientSocket, GNetworkingSHUTDOWNRDWR);
     m_mutex.unlock();
@@ -267,11 +323,16 @@ void Server::_HandleOnThread(SSL *_client, WEPP_HANDLER_FUNC _handler, WEPP_POST
   GLog::Log(GLog::LOG_TRACE, (char *)recvBuffer.data());
   req.ParseRequest(recvBuffer);
 
-  GLog::Log(GLog::LOG_TRACE, '[' + std::to_string(clientSocket) + "]: Sending request to handler");
+  GLog::Log(GLog::LOG_TRACE, '[' + std::to_string(clientSocket) +
+                                 "]: Sending request to handler");
   if (_handler(req, resp, closeConnection)) {
-    GLog::Log(GLog::LOG_TRACE, '[' + std::to_string(clientSocket) + "]: Request successful, sending to post handler");
+    GLog::Log(GLog::LOG_TRACE,
+              '[' + std::to_string(clientSocket) +
+                  "]: Request successful, sending to post handler");
     if (_postHandler(req, intermediateResp)) {
-      GLog::Log(GLog::LOG_TRACE, '[' + std::to_string(clientSocket) + "]: Post handler successful, sending to client");
+      GLog::Log(GLog::LOG_TRACE,
+                '[' + std::to_string(clientSocket) +
+                    "]: Post handler successful, sending to client");
       _SendBuffer(_client, intermediateResp.CreateResponse(), false);
     }
   }
