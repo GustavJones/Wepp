@@ -7,4 +7,4 @@ cd /d "%~dp0"
 cmake.exe -S . -B build -DCMAKE_BUILD_TYPE=Debug
 
 :: Build cmake project
-cmake --build build --config Debug -j
+cmake --build build --config Debug -j6

@@ -46,3 +46,5 @@ When run a `data` directory should be created where the server will be serving a
 
 This project uses `libopenssl` for TLS encryption. This repository does not include any source or binary distribution
 of OpenSSL software but uses it's functions.
+
+This project also uses `wxWidgets` for Wepp-Builder subproject. See `external/wxWidgets` for more information.
