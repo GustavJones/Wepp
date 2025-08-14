@@ -130,43 +130,49 @@ void Server::_AcceptConnections() {
       GParsing::HTTPRequest req;
 
       GLog::Log(GLog::LOG_TRACE, "SSL handshake failed. Redirecting to HTTPS.");
-      req.ParseRequest(buffer);
-
-      std::string hostValue;
-      for(const auto & header : req.headers) {
-        if (header.first == "Host") {
-          if (header.second.size() != 1) {
-            break;
-          } else {
-            hostValue = header.second[0];
+      try {
+        req.ParseRequest(buffer);
+        std::string hostValue;
+        for (const auto &header : req.headers) {
+          if (header.first == "Host") {
+            if (header.second.size() != 1) {
+              break;
+            } else {
+              hostValue = header.second[0];
+            }
           }
         }
+
+        if (hostValue != "") {
+          const std::string findHTTP = "http://";
+          if (hostValue.find(findHTTP) == 0) {
+            hostValue.replace(0, findHTTP.length(), "https://");
+          } else if (hostValue.find('/') == 0) {
+            hostValue.insert(0, "https:/");
+          } else {
+            hostValue.insert(0, "https://");
+          }
+
+          redirectResponse.response_code = 301;
+          redirectResponse.response_code_message = "Moved Permanently";
+          redirectResponse.headers.push_back({"Location", {hostValue}});
+          redirectResponse.version = "HTTP/1.1";
+          redirectResponse.message.clear();
+          auto respBuffer = redirectResponse.CreateResponse();
+
+          GNetworking::SocketSend(SSL_get_fd(connection),
+                                  (char *)respBuffer.data(), respBuffer.size(),
+                                  0);
+        }
+
+        GNetworking::SocketShutdown(SSL_get_fd(connection),
+                                    GNetworkingSHUTDOWNRDWR);
+      } catch (const std::exception &) {
+        GLog::Log(GLog::LOG_TRACE,
+                  "Redirect Failed. Closing Socket.");
+        GNetworking::SocketShutdown(SSL_get_fd(connection),
+                                    GNetworkingSHUTDOWNRDWR);
       }
-
-      if (hostValue != "") {
-        const std::string findHTTP = "http://";
-        if (hostValue.find(findHTTP) == 0) {
-          hostValue.replace(0, findHTTP.length(), "https://");
-        }
-        else if (hostValue.find('/') == 0) {
-          hostValue.insert(0, "https:/");
-        }
-        else {
-          hostValue.insert(0, "https://");
-        }
-
-        redirectResponse.response_code = 301;
-        redirectResponse.response_code_message = "Moved Permanently";
-        redirectResponse.headers.push_back({"Location", {hostValue}});
-        redirectResponse.version = "HTTP/1.1";
-        redirectResponse.message.clear();
-        auto respBuffer = redirectResponse.CreateResponse();
-
-        GNetworking::SocketSend(SSL_get_fd(connection), (char *)respBuffer.data(), respBuffer.size(), 0);
-      }
-
-      GNetworking::SocketShutdown(SSL_get_fd(connection),
-                                  GNetworkingSHUTDOWNRDWR);
     }
   }
 }
