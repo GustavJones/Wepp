@@ -120,12 +120,10 @@ void Server::_AcceptConnections() {
 
     pollSize = GNetworking::SocketPollSize(SSL_get_fd(connection));
     buffer.resize(pollSize);
-    GNetworking::SocketPeek(SSL_get_fd(connection), (char *)buffer.data(),
-                            buffer.size(), 0);
+    GNetworking::SocketPeek(SSL_get_fd(connection), (char *)buffer.data(), buffer.size(), 0);
 
     output = SSL_accept(connection);
-    GLog::Log(GLog::LOG_DEBUG,
-              "SSL handshake attempt output: " + std::to_string(output));
+    GLog::Log(GLog::LOG_DEBUG, "SSL handshake attempt output: " + std::to_string(output));
 
     if (output < 0) {
       GParsing::HTTPResponse redirectResponse;
