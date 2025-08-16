@@ -1,4 +1,4 @@
-#include "Application/HTTPChecks.hpp"
+#include "Server/HTTPChecks.hpp"
 
 namespace Wepp {
 bool HasHostHeader(const GParsing::HTTPRequest &_req) {

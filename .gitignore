@@ -1,8 +1,10 @@
 **/.cache
-build/**
 *.pem
-**/data/
-.vs/**
-.vscode/**
-out/**
 **/*.xrc
+**/*.fbp
+build
+data
+.vs
+.vscode
+out
+files

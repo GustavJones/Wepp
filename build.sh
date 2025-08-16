@@ -7,4 +7,4 @@ cd $(dirname $0)
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 
 # Build project
-cmake --build build -j6
+cmake --build build -j $((`nproc` - 1))
