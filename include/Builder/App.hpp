@@ -1,4 +1,5 @@
 #pragma once
+#include "MainFrame.hpp"
 #include <wx/wx.h>
 
 #define WEPP_BUILDER_APP_NAME "Wepp Builder"
@@ -8,7 +9,7 @@
 namespace Wepp {
 class WeppBuilderApp : public wxApp {
 private:
-  wxFrame *m_mainFrame;
+  MainFrame *m_mainFrame;
 public:
   WeppBuilderApp();
   ~WeppBuilderApp();

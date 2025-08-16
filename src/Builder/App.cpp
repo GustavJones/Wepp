@@ -1,5 +1,4 @@
 #include "Builder/App.hpp"
-#include "wx/object.h"
 #include <stdexcept>
 #include <wx/xrc/xmlres.h>
 #include <wx/wx.h>
@@ -16,7 +15,7 @@ bool WeppBuilderApp::OnInit() {
     throw std::runtime_error("Cannot find MainFrame.xrc");
   }
 
-  m_mainFrame = wxDynamicCast(wxXmlResource::Get()->LoadObject(nullptr, "MainFrame", "wxFrame"), wxFrame);
+  m_mainFrame = wxDynamicCast(wxXmlResource::Get()->LoadObject(nullptr, "MainFrame", "wxFrame"), MainFrame);
   m_mainFrame->Show();
   return true;
 }
