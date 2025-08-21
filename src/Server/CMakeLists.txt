@@ -26,4 +26,4 @@ if(WIN32)
   target_link_libraries(Wepp-Server PRIVATE crypt32)
 endif()
 
-target_link_libraries(Wepp-Server PRIVATE GLog GNetworking GParsing-HTTP ${OPENSSL_LIBRARIES})
+target_link_libraries(Wepp-Server PRIVATE  Wepp-FileHandling GLog GNetworking GParsing-HTTP ${OPENSSL_LIBRARIES})

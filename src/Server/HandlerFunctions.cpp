@@ -1,5 +1,5 @@
-#include "Application/HandlerFunctions.hpp"
-#include "Application/HTTPChecks.hpp"
+#include "Server/HandlerFunctions.hpp"
+#include "Server/HTTPChecks.hpp"
 #include "FileHandling/FileIO.hpp"
 #include "GLog/Log.hpp"
 #include <filesystem>

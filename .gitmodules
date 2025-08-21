@@ -7,3 +7,6 @@
 [submodule "GParsing"]
 	path = external/GParsing
 	url = https://github.com/GustavJones/GParsing.git
+[submodule "wxWidgets"]
+	path = external/wxWidgets
+	url = https://github.com/wxWidgets/wxWidgets.git
