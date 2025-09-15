@@ -7,10 +7,12 @@
 #include <wx/propgrid/propgrid.h>
 #include <wx/webview.h>
 #include <wx/dataview.h>
+#include "GParsing/HTML/GParsing-HTML.hpp"
 
 namespace Wepp {
 class MainFrame : public wxFrame {
 private:
+  GParsing::HTMLDocument<char> m_doc;
   std::filesystem::path m_filesDir;
   std::string m_webserverAddress;
   uint16_t m_webserverPort;
@@ -41,6 +43,9 @@ private:
 
   wxPropertyGrid *m_sidebarProperties;
   wxDataViewTreeCtrl* m_toolkitDataTree;
+
+  wxDataViewItem m_rootContainer;
+  wxDataViewItem m_doctypeContainer;
 
 public:
   MainFrame(const std::string &_programName, uint16_t _programVersionMajor, uint16_t _programVersionMinor, const std::filesystem::path &_filesDir, const std::string &_webserverAddress, const uint16_t _webserverPort);

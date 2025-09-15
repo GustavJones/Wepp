@@ -3,7 +3,7 @@ project(Wepp-Server CXX)
 
 option(OPENSSL_USE_STATIC_LIBS "Build Application with Static OpenSSL Libraries" TRUE)
 
-if((NOT DEFINED OPENSSL_ROOT_DIR) OR (OPENSSL_ROOTDIR STREQUAL ""))
+if((NOT DEFINED OPENSSL_ROOT_DIR) OR (OPENSSL_ROOT_DIR STREQUAL ""))
   message(STATUS "No SSL Root directory defined. Reading from environment variables.")
   set(OPENSSL_ROOT_DIR  $ENV{OPENSSL_ROOT_DIR})
 endif()

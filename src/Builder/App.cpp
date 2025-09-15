@@ -46,7 +46,7 @@ bool WeppBuilderApp::OnInit() {
 
   m_webserverThread = std::async(std::launch::async, &WeppBuilderApp::RunWebServer, this);
 
-  m_mainFrame = new MainFrame(WEPP_BUILDER_APP_NAME, WEPP_BUILDER_APP_VERSION_MAJOR, WEPP_BUILDER_APP_VERSION_MINOR, WEPP_BUILDER_FILES_DIR, WEPP_BUILDER_WEBSERVER_ADDRESS, WEPP_BUILDER_WEBSERVER_PORT);
+  m_mainFrame = new MainFrame(WEPP_BUILDER_APP_NAME, WEPP_BUILDER_APP_VERSION_MAJOR, WEPP_BUILDER_APP_VERSION_MINOR, std::filesystem::absolute(WEPP_BUILDER_FILES_DIR), WEPP_BUILDER_WEBSERVER_ADDRESS, WEPP_BUILDER_WEBSERVER_PORT);
   SetTopWindow(m_mainFrame);
   m_mainFrame->Show();
   return true;

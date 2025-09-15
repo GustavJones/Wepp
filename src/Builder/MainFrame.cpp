@@ -41,7 +41,7 @@ MainFrame::MainFrame(const std::string &_programName,
   setenv("WEBKIT_DISABLE_COMPOSITING_MODE", "1", 1);
 #endif // __unix__
 
-  m_auiViewport = wxWebView::New(this, ID_WEB_VIEW, "http://" + m_webserverAddress + ':' + std::to_string(m_webserverPort));
+  m_auiViewport = wxWebView::New(this, ID_WEB_VIEW);
   m_auiToolkit = new wxPanel(this);
 
   m_auiManager.AddPane(m_auiSidebar, wxLEFT, "Sidebar");
@@ -74,8 +74,35 @@ MainFrame::MainFrame(const std::string &_programName,
   m_auiSidebar->Layout();
   m_auiToolkit->Layout();
 
+  m_auiViewport->Bind(wxEVT_WEBVIEW_LOADED, [this](wxWebViewEvent & evt) {
+    std::string html = m_auiViewport->GetPageSource().ToStdString();
+    try {
+      m_doc.Parse(html.c_str(), html.length());
+    }
+    catch (const std::exception& e) {
+      return;
+    }
+
+    m_toolkitDataTree->DeleteAllItems();
+
+    std::string rootName;
+
+    for (size_t i = 0; i < m_doc.GetRootElement()->GetNameSize(); i++)
+    {
+      rootName += m_doc.GetRootElement()->GetName()[i];
+    }
+
+    wxDataViewItem childItem;
+
+    m_doctypeContainer = m_toolkitDataTree->AppendContainer(wxDataViewItem(), "DOCTYPE");
+    m_rootContainer = m_toolkitDataTree->AppendContainer(wxDataViewItem(), rootName);
+
+    childItem = m_toolkitDataTree->AppendContainer(m_doctypeContainer, "Root");
+    m_toolkitDataTree->AppendItem(childItem, m_doc.GetDoctype().root);
+    });
+
+  m_auiViewport->LoadURL("http://" + m_webserverAddress + ':' + std::to_string(m_webserverPort));
   m_sidebarProperties->Append(new wxStringProperty("Test", "Name", "Value"));
-  m_toolkitDataTree->AppendContainer(wxDataViewItem(), "Root");
 }
 
 MainFrame::~MainFrame() { m_auiManager.UnInit(); }
