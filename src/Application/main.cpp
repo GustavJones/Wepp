@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
   GLog::SetLogPrefix(PREFIX);
 
   Wepp::SetupHandling();
-  Wepp::Server server(Wepp::HandleWeb, Wepp::HandleWebPost, true);
+  Wepp::Server server(Wepp::HandleWeb, Wepp::HandleWebPost, false);
 
   std::atomic<bool> close = false;
   GLog::Log(GLog::LOG_PRINT, "Starting Wepp server on " + ADDRESS + ':' + std::to_string(PORT));

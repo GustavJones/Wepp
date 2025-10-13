@@ -2,6 +2,7 @@
 *.pem
 **/*.xrc
 **/*.fbp
+CMakeSettings.json
 build
 data
 .vs
