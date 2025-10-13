@@ -127,7 +127,17 @@ void Server::_AcceptConnections() {
   SSL_set_fd(connection, GNetworking::SocketAccept(GetServerSocket()));
   GLog::Log(GLog::LOG_DEBUG, "Opened Connection on Socket FD: " + std::to_string(SSL_get_fd(connection)));
 
+  std::this_thread::sleep_for(std::chrono::microseconds(25));
+
   pollSize = GNetworking::SocketPollSize(SSL_get_fd(connection));
+
+  if (pollSize <= 0)
+  {
+    GetClientSockets().push_back({ connection, false });
+    GNetworking::SocketShutdown(SSL_get_fd(connection), GNetworkingSHUTDOWNRDWR);
+    return;
+  }
+
   buffer.resize(pollSize);
   GNetworking::SocketPeek(SSL_get_fd(connection), (char *)buffer.data(), buffer.size(), 0);
 
@@ -197,7 +207,8 @@ void Server::_AcceptConnections() {
       respBuffer.push_back('\0');
 
       GLog::Log(GLog::LOG_TRACE, (std::string)"Redirect HTTP response: \n" + (char *)respBuffer.data());
-      GNetworking::SocketSend(SSL_get_fd(connection), (char *)respBuffer.data(), respBuffer.size(), 0);
+      GLog::Log(GLog::LOG_DEBUG, '[' + std::to_string(SSL_get_fd(connection)) + "]: Redirecting to " + hostValue + '.');
+      _SendBuffer(connection, respBuffer, true);
     }
 
     // This is buggy and I don't know why

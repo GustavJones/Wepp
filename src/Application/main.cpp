@@ -18,10 +18,18 @@ int main(int argc, char *argv[]) {
   GLog::SetLogPrefix(PREFIX);
 
   Wepp::SetupHandling();
-  Wepp::Server server(Wepp::HandleWeb, Wepp::HandleWebPost, false);
+  Wepp::Server server(Wepp::HandleWeb, Wepp::HandleWebPost, true);
 
   std::atomic<bool> close = false;
   GLog::Log(GLog::LOG_PRINT, "Starting Wepp server on " + ADDRESS + ':' + std::to_string(PORT));
-  server.Run(ADDRESS, PORT, close);
+
+  try {
+    server.Run(ADDRESS, PORT, close);
+  }
+  catch (const std::exception &e) {
+    GLog::Log(GLog::LOG_ERROR, e.what());
+    return 1;
+  }
+
   return 0;
 }
