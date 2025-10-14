@@ -1,5 +1,5 @@
-#include "Application/HandlerFunctions.hpp"
-#include "Application/HTTPChecks.hpp"
+#include "Server/HandlerFunctions.hpp"
+#include "Server/HTTPChecks.hpp"
 #include "FileHandling/FileIO.hpp"
 #include "GLog/Log.hpp"
 #include <filesystem>
@@ -18,12 +18,21 @@ bool HandleWeb(GParsing::HTTPRequest _req, GParsing::HTTPResponse &_resp,
   std::vector<unsigned char> buffer;
 
   if (!HasHostHeader(_req)) {
-    GLog::Log(GLog::LOG_WARNING,
-              "[Handler]: Connection request did not provide a Host header");
+    GLog::Log(GLog::LOG_WARNING, "[Handler]: Connection request did not provide a Host header");
+
+    if (_req.method != GParsing::GPARSING_UNKNOWN)
+    {
+      buffer = _req.CreateRequest();
+      buffer.push_back('\0');
+
+      GLog::Log(GLog::LOG_TRACE, (std::string)"[Handler]: " + (char*)buffer.data());
+    }
+
     _resp.version = "HTTP/1.1";
     _resp.response_code = 400;
     _resp.response_code_message = "Bad Request";
     _resp.headers.push_back({"Connection", {"close"}});
+    _closeConnection = true;
     return false;
   }
 
@@ -42,13 +51,10 @@ bool HandleWeb(GParsing::HTTPRequest _req, GParsing::HTTPResponse &_resp,
   _resp.response_code = 200;
   _resp.response_code_message = "OK";
 
-  GLog::Log(GLog::LOG_TRACE, "[Handler]: Requesting URI - " +
-                                 std::filesystem::absolute(_req.uri).string());
-  if (std::filesystem::exists(
-          std::filesystem::absolute(s_DATA_PATH / _req.uri))) {
+  GLog::Log(GLog::LOG_TRACE, "[Handler]: Requesting URI - " + std::filesystem::absolute(_req.uri).string());
+  if (std::filesystem::exists(std::filesystem::absolute(s_DATA_PATH / _req.uri))) {
     GLog::Log(GLog::LOG_TRACE, "[Handler]: File found!");
-    buffer.resize(
-        Wepp::FileSize(std::filesystem::absolute(s_DATA_PATH / _req.uri)));
+    buffer.resize(Wepp::FileSize(std::filesystem::absolute(s_DATA_PATH / _req.uri)));
     Wepp::ReadFile(std::filesystem::absolute(s_DATA_PATH / _req.uri), buffer);
 
     _resp.message = buffer;
@@ -68,7 +74,7 @@ bool HandleWebPost(GParsing::HTTPRequest _req, GParsing::HTTPResponse &_resp) {
   _resp.version = "HTTP/1.1";
   _resp.response_code = 100;
   _resp.response_code_message = "Continue";
-  _resp.headers.push_back({"Connection", {"keep-alive"}});
+  // _resp.headers.push_back({"Connection", {"keep-alive"}});
   return true;
 }
 } // namespace Wepp

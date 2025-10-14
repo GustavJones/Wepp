@@ -1,6 +1,6 @@
-#include "Application/HandlerFunctions.hpp"
 #include "GLog/Log.hpp"
 #include "Server/Server.hpp"
+#include "Server/HandlerFunctions.hpp"
 #include <string>
 #include <cstdint>
 
@@ -18,9 +18,18 @@ int main(int argc, char *argv[]) {
   GLog::SetLogPrefix(PREFIX);
 
   Wepp::SetupHandling();
-  Wepp::Server server(Wepp::HandleWeb, Wepp::HandleWebPost);
+  Wepp::Server server(Wepp::HandleWeb, Wepp::HandleWebPost, true);
 
+  std::atomic<bool> close = false;
   GLog::Log(GLog::LOG_PRINT, "Starting Wepp server on " + ADDRESS + ':' + std::to_string(PORT));
-  server.Run(ADDRESS, PORT);
+
+  try {
+    server.Run(ADDRESS, PORT, close);
+  }
+  catch (const std::exception &e) {
+    GLog::Log(GLog::LOG_ERROR, e.what());
+    return 1;
+  }
+
   return 0;
 }

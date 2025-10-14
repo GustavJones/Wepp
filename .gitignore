@@ -1,7 +1,11 @@
 **/.cache
-build/**
 *.pem
-**/data/
-.vs/**
-.vscode/**
-out/**
+**/*.xrc
+**/*.fbp
+CMakeSettings.json
+build
+data
+.vs
+.vscode
+out
+files
