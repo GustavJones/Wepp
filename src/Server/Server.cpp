@@ -1,4 +1,4 @@
-#include "Server/Server.hpp"
+#include "Wepp/Server/Server.hpp"
 #include "GNetworking/Socket.hpp"
 #include "GParsing/GParsing.hpp"
 #include <chrono>

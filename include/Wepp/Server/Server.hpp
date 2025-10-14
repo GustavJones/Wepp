@@ -2,7 +2,7 @@
 #include "GLog/Log.hpp"
 #include "GNetworking/Socket.hpp"
 #include "GParsing/GParsing.hpp"
-#include "Server/ClientSocket.hpp"
+#include "Wepp/Server/ClientSocket.hpp"
 #include <atomic>
 #include <cstddef>
 #include <cstdint>

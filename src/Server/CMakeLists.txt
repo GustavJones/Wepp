@@ -20,7 +20,7 @@ file(GLOB SOURCES "*.cpp")
 file(GLOB LIBRARY_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/../../external/*/include")
 add_library(Wepp-Server ${SOURCES})
 target_include_directories(Wepp-Server PUBLIC ${OPENSSL_INCLUDE_DIR})
-target_include_directories(Wepp-Server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../include ${LIBRARY_INCLUDES})
+target_include_directories(Wepp-Server PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../include ${LIBRARY_INCLUDES})
 
 if(WIN32)
   target_link_libraries(Wepp-Server PRIVATE crypt32)

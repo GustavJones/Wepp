@@ -1,6 +1,6 @@
-#include "Server/HandlerFunctions.hpp"
-#include "Server/HTTPChecks.hpp"
-#include "FileHandling/FileIO.hpp"
+#include "Wepp/Server/HandlerFunctions.hpp"
+#include "Wepp/Server/HTTPChecks.hpp"
+#include "Wepp/FileHandling/FileIO.hpp"
 #include "GLog/Log.hpp"
 #include <filesystem>
 

@@ -1,6 +1,6 @@
 #include "GLog/Log.hpp"
-#include "Server/Server.hpp"
-#include "Server/HandlerFunctions.hpp"
+#include "Wepp/Server/Server.hpp"
+#include "Wepp/Server/HandlerFunctions.hpp"
 #include <string>
 #include <cstdint>
 
