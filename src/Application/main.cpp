@@ -6,7 +6,7 @@
 
 static const std::string PREFIX = "[Wepp]";
 static const std::string ADDRESS = "0.0.0.0";
-static const uint16_t PORT = 8081;
+static uint16_t PORT = 8080;
 
 int main(int argc, char *argv[]) {
 #ifdef NDEBUG
@@ -16,6 +16,15 @@ int main(int argc, char *argv[]) {
 #endif // NDEBUG
 
   GLog::SetLogPrefix(PREFIX);
+
+  if (argc == 2) {
+    try {
+      PORT = std::stoi(argv[1]);
+    }
+    catch (const std::exception&) {
+      GLog::Log(GLog::LOG_WARNING, "Could not set port from command line arguments. Using default.");
+    }
+  }
 
   Wepp::SetupHandling();
   Wepp::Server server(Wepp::HandleWeb, Wepp::HandleWebPost, true);
