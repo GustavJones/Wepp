@@ -127,7 +127,7 @@ void Server::_AcceptConnections() {
   SSL_set_fd(connection, GNetworking::SocketAccept(GetServerSocket()));
   GLog::Log(GLog::LOG_DEBUG, "Opened Connection on Socket FD: " + std::to_string(SSL_get_fd(connection)));
 
-  std::this_thread::sleep_for(std::chrono::microseconds(25));
+  std::this_thread::sleep_for(std::chrono::microseconds(1000));
 
   pollSize = GNetworking::SocketPollSize(SSL_get_fd(connection));
 
