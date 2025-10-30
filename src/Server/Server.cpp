@@ -35,7 +35,7 @@ void Server::Run(const std::string &_address, const uint16_t _port, std::atomic<
 
 void Server::_MainLoop(std::atomic<bool> &_close) {
   while (!_close) {
-    std::this_thread::sleep_for(std::chrono::microseconds(25));
+    std::this_thread::sleep_for(std::chrono::microseconds(250));
 
     _AcceptConnections();
     _HandleClients();
@@ -127,7 +127,7 @@ void Server::_AcceptConnections() {
   SSL_set_fd(connection, GNetworking::SocketAccept(GetServerSocket()));
   GLog::Log(GLog::LOG_DEBUG, "Opened Connection on Socket FD: " + std::to_string(SSL_get_fd(connection)));
 
-  std::this_thread::sleep_for(std::chrono::microseconds(1000));
+  std::this_thread::sleep_for(std::chrono::microseconds(2500));
 
   pollSize = GNetworking::SocketPollSize(SSL_get_fd(connection));
 
@@ -314,7 +314,14 @@ bool Server::_ReadBuffer(const ClientSocket&_client, std::vector<unsigned char> 
 
   m_mutex.lock();
   if (_client.encrypted) {
-    int readTotal = SSL_read(_client.socket, _buffer.data(), _buffer.size());
+    int readTotal;
+    try {
+      readTotal = SSL_read(_client.socket, _buffer.data(), _buffer.size());
+    }
+    catch (const std::exception&) {
+      GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client.socket)) + "]: SSL_read threw an exception");
+      readTotal = -1;
+    }
 
     if (readTotal <= 0)
     {
@@ -326,7 +333,7 @@ bool Server::_ReadBuffer(const ClientSocket&_client, std::vector<unsigned char> 
     // For possible SSL layer buffering
     if (readTotal != _buffer.size())
     {
-      while (SSL_pending(_client.socket))
+      while (SSL_pending(_client.socket) && !GNetworking::SocketPoll(SSL_get_fd(_client.socket), GNetworkingPOLLHUP))
       {
         int readAmount = SSL_read(_client.socket, _buffer.data() + readTotal, _buffer.size() - readTotal);
 
@@ -352,20 +359,24 @@ bool Server::_ReadBuffer(const ClientSocket&_client, std::vector<unsigned char> 
 }
 
 bool Server::_SendBuffer(const ClientSocket&_client, const std::vector<unsigned char> &_buffer, bool _close) {
-  GLog::Log(GLog::LOG_TRACE, '[' + std::to_string(SSL_get_fd(_client.socket)) +
-                                 "]: Sending response");
+  GLog::Log(GLog::LOG_TRACE, '[' + std::to_string(SSL_get_fd(_client.socket)) + "]: Sending response");
   if (GNetworking::SocketPoll(SSL_get_fd(_client.socket), GNetworkingPOLLHUP)) {
-    GLog::Log(GLog::LOG_WARNING, '[' +
-                                     std::to_string(SSL_get_fd(_client.socket)) +
-                                     "]: Failed to send on socket");
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client.socket)) + "]: Failed to send on socket");
     GNetworking::SocketShutdown(SSL_get_fd(_client.socket), GNetworkingSHUTDOWNRDWR);
     return false;
   }
 
   m_mutex.lock();
   if (_client.encrypted) {
-    if (SSL_write(_client.socket, _buffer.data(), _buffer.size()) <= 0)
-    {
+    try {
+      if (SSL_write(_client.socket, _buffer.data(), _buffer.size()) <= 0)
+      {
+        m_mutex.unlock();
+        return false;
+      }     
+    }
+    catch (const std::exception&) {
+      GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(SSL_get_fd(_client.socket)) + "]: SSL_write threw an exception");
       m_mutex.unlock();
       return false;
     }
@@ -393,6 +404,14 @@ void Server::_HandleOnThread(const ClientSocket&_client, WEPP_HANDLER_FUNC _hand
   GNetworking::GNetworkingSocket clientSocket = SSL_get_fd(_client.socket);
 
   size_t recvSize;
+
+  if (GNetworking::SocketPoll(clientSocket, GNetworkingPOLLHUP)) {
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(clientSocket) + "]: Socket closed before being handled");
+    m_mutex.lock();
+    GNetworking::SocketShutdown(clientSocket, GNetworkingSHUTDOWNRDWR);
+    m_mutex.unlock();
+    return;
+  }
 
   if (!GNetworking::SocketPoll(clientSocket, GNetworkingPOLLIN)) {
     return;
@@ -439,7 +458,10 @@ void Server::_HandleOnThread(const ClientSocket&_client, WEPP_HANDLER_FUNC _hand
     }
   }
 
-  _SendBuffer(_client, resp.CreateResponse(), closeConnection);
+  if (!_SendBuffer(_client, resp.CreateResponse(), closeConnection)) {
+    GLog::Log(GLog::LOG_WARNING, '[' + std::to_string(clientSocket) + "]: Response send failed");    
+    GNetworking::SocketShutdown(clientSocket, GNetworkingSHUTDOWNRDWR);
+  }
 }
 
 GNetworking::GNetworkingSocket &Server::GetServerSocket() {
